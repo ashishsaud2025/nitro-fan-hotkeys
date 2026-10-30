@@ -132,8 +132,8 @@ if ($registered -eq 0) {
 
 Write-FanLog "Hotkey listener started ($registered registered)."
 
-# Build the panel now rather than on the first keypress.
-try { [FanOsd]::Prepare() } catch { Write-FanLog "WARNING: panel unavailable: $($_.Exception.Message)" }
+# The overlay form is created lazily on the first keypress (in FanOsd.Show),
+# so idling costs nothing extra beyond PowerShell itself.
 
 
 $window.add_Hotkey({
