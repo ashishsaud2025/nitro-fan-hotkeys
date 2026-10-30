@@ -6,6 +6,7 @@
       Ctrl + Alt + Down   lower fan speed by 10
       Ctrl + Alt + 0      automatic (Acer's own curve)
       Ctrl + Alt + 9      maximum
+      Ctrl + Alt + 1/2/3  Quiet / Default / Performance mode
 
     Runs hidden from a scheduled task at logon (install.ps1 sets that up), so
     the shortcuts work in every application and never ask for administrator
@@ -17,6 +18,7 @@ $script:Root    = $PSScriptRoot
 $script:LogFile = Join-Path $env:LOCALAPPDATA 'FanHotkeys\hotkeys.log'
 
 . (Join-Path $script:Root 'FanCore.ps1')
+. (Join-Path $script:Root 'FanOsd.ps1')
 
 function Write-FanLog([string]$Message) {
     try {
@@ -30,13 +32,7 @@ function Write-FanLog([string]$Message) {
 }
 
 function Show-FanOsd([string]$Text) {
-    try {
-        Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @(
-            '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
-            '-File', "`"$script:Root\fan-osd.ps1`"",
-            '-Text', "`"$Text`""
-        ) | Out-Null
-    }
+    try { [FanOsd]::Show($Text) }
     catch { }
 }
 
@@ -135,6 +131,9 @@ if ($registered -eq 0) {
 }
 
 Write-FanLog "Hotkey listener started ($registered registered)."
+
+# Build the panel now rather than on the first keypress.
+try { [FanOsd]::Prepare() } catch { Write-FanLog "WARNING: panel unavailable: $($_.Exception.Message)" }
 
 
 $window.add_Hotkey({

@@ -61,7 +61,7 @@ instance, so a second copy exits immediately.
 | `FanCore.ps1` | pipe protocol, telemetry, state, set/step functions |
 | `fanctl.ps1` | command line front end |
 | `fan-hotkeys.ps1` | global hotkey listener (runs hidden at logon) |
-| `fan-osd.ps1` | the small on-screen confirmation panel |
+| `FanOsd.ps1` | the small on-screen confirmation panel (drawn inside the listener) |
 | `install.ps1` | creates/removes the logon task |
 | `hotkeys.log` | one line per press, plus errors |
 
