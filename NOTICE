@@ -1,0 +1,18 @@
+Nitro Fan Hotkeys
+Copyright 2026 Ashish
+
+This product includes software and protocol knowledge derived from RESense
+(https://github.com/mdonmez/RESense), Copyright mdonmez,
+licensed under the Apache License, Version 2.0.
+
+The fan control command encoding, the telemetry query layout and the
+NitroSense registry synchronisation approach in FanCore.ps1 were derived from
+that project, then verified independently on an Acer Nitro AN515-58
+(NitroSense Service 3.01.3052, Windows 11).
+
+Additional background on Acer fan interfaces came from
+acer-aspire-fan-control (https://github.com/vicentetob/acer-aspire-fan-control),
+Copyright vicentetob, MIT licensed. No code from that project is included.
+
+Acer, Nitro, NitroSense and Predator are trademarks of Acer Inc. This project
+is unofficial and is not affiliated with, endorsed by, or supported by Acer.

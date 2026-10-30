@@ -1,0 +1,12 @@
+# Local runtime files - not part of the project
+hotkeys.log
+hotkeys.log.old
+*.log
+state.json
+*.old
+
+# Editor / OS noise
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

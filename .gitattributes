@@ -1,0 +1,5 @@
+* text=auto
+*.ps1 text eol=crlf
+*.md  text eol=lf
+LICENSE text eol=lf
+NOTICE  text eol=lf
