@@ -3,18 +3,21 @@
     fanctl.ps1 - command line for the fan
 
     Usage:
-      fanctl.ps1 status          show temperatures, RPM and the current mode
+      fanctl.ps1 status          show temperatures, RPM, fan mode and system mode
       fanctl.ps1 auto            hand the fans back to Acer's own curve
       fanctl.ps1 max             maximum fan speed
       fanctl.ps1 set 70          CPU and GPU fans at 70%
       fanctl.ps1 set 70 50       CPU 70%, GPU 50%
       fanctl.ps1 step 10         raise the current speed by 10 points
       fanctl.ps1 step -10        lower it by 10 points
+      fanctl.ps1 quiet           quiet performance mode
+      fanctl.ps1 default         default performance mode
+      fanctl.ps1 performance     performance mode
 #>
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('status', 'auto', 'max', 'set', 'step')]
+    [ValidateSet('status', 'auto', 'max', 'set', 'step', 'quiet', 'default', 'performance')]
     [string]$Command = 'status',
 
     [Parameter(Position = 1)]
@@ -41,6 +44,9 @@ try {
             $result = Step-Fan -Delta $Value
             "Fan set to CPU $($result.Percent)% / GPU $($result.GpuPercent)%"
         }
+        'quiet'       { Set-OperationMode quiet | Out-Null;       Format-FanStatus }
+        'default'     { Set-OperationMode default | Out-Null;     Format-FanStatus }
+        'performance' { Set-OperationMode performance | Out-Null; Format-FanStatus }
     }
 }
 catch {

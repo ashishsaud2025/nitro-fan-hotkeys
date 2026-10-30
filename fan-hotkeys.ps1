@@ -77,10 +77,13 @@ $MOD_SHIFT     = 0x0004
 $MOD_NOREPEAT  = 0x4000
 
 $bindings = @(
-    @{ Id = 1; Key = 0x26; Action = 'up'   },  # VK_UP
-    @{ Id = 2; Key = 0x28; Action = 'down' },  # VK_DOWN
-    @{ Id = 3; Key = 0x30; Action = 'auto' },  # 0
-    @{ Id = 4; Key = 0x39; Action = 'max'  }   # 9
+    @{ Id = 1; Key = 0x26; Action = 'up'          },  # VK_UP
+    @{ Id = 2; Key = 0x28; Action = 'down'        },  # VK_DOWN
+    @{ Id = 3; Key = 0x30; Action = 'auto'        },  # 0
+    @{ Id = 4; Key = 0x39; Action = 'max'         },  # 9
+    @{ Id = 5; Key = 0x31; Action = 'quiet'       },  # 1
+    @{ Id = 6; Key = 0x32; Action = 'default'     },  # 2
+    @{ Id = 7; Key = 0x33; Action = 'performance' }   # 3
 )
 
 # Single instance guard: a second listener would fight over the same hotkeys.
@@ -158,6 +161,21 @@ $window.add_Hotkey({
                 Set-FanMax
                 Show-FanOsd 'Fan Max'
                 Write-FanLog 'Ctrl+Alt+9 -> max'
+            }
+            5 {
+                Set-OperationMode quiet | Out-Null
+                Show-FanOsd 'Quiet'
+                Write-FanLog 'Ctrl+Alt+1 -> quiet'
+            }
+            6 {
+                Set-OperationMode default | Out-Null
+                Show-FanOsd 'Default'
+                Write-FanLog 'Ctrl+Alt+2 -> default'
+            }
+            7 {
+                Set-OperationMode performance | Out-Null
+                Show-FanOsd 'Performance'
+                Write-FanLog 'Ctrl+Alt+3 -> performance'
             }
         }
     }

@@ -31,7 +31,8 @@ $script:PipeName     = 'PredatorSense_service_namedpipe'
 $script:BehaviorAuto = [uint64]0x410009
 $script:BehaviorMax  = [uint64]0x820009
 $script:StateDir     = Join-Path $env:LOCALAPPDATA 'FanHotkeys'
-$script:RegistryKey  = 'SOFTWARE\OEM\NitroSense\FanControl'
+$script:FanKey       = 'SOFTWARE\OEM\NitroSense\FanControl'
+$script:ModeKey      = 'SOFTWARE\OEM\NitroSense\Overclock'
 $script:MinPercent   = 20
 $script:MaxPercent   = 100
 
@@ -100,26 +101,33 @@ function Invoke-AcerGet {
 function Invoke-AcerSet {
     param([uint16]$Code, [uint64]$Value)
     $reply = Send-AcerFrame -Code $Code -Arguments @(, (ConvertTo-U64Argument $Value)) -ReplySize 9
-    $code = [BitConverter]::ToUInt32($reply, 5)
-    if ($code -ne 0) { throw "NitroSense service rejected command $Code (return code $code)." }
+    $returnCode = [BitConverter]::ToUInt32($reply, 5)
+    if ($returnCode -ne 0) { throw "NitroSense service rejected command $Code (return code $returnCode)." }
+}
+
+function Invoke-AcerSet32 {
+    param([uint16]$Code, [uint32]$Value)
+    $reply = Send-AcerFrame -Code $Code -Arguments @(, (ConvertTo-U32Argument $Value)) -ReplySize 9
+    $returnCode = [BitConverter]::ToUInt32($reply, 5)
+    if ($returnCode -ne 0) { throw "NitroSense service rejected command $Code (return code $returnCode)." }
 }
 
 function Set-NitroSenseRegistry {
-    param([string]$Name, [uint32]$Value)
+    param([string]$Key, [string]$Name, [uint32]$Value)
     $reply = Send-AcerFrame -Code 3 -ReplySize 9 -Arguments @(
-        (ConvertTo-StringArgument "HKEY_LOCAL_MACHINE\$script:RegistryKey"),
+        (ConvertTo-StringArgument "HKEY_LOCAL_MACHINE\$Key"),
         (ConvertTo-StringArgument $Name),
         (ConvertTo-U32Argument 4),
         (ConvertTo-U32Argument $Value)
     )
-    $code = [BitConverter]::ToUInt32($reply, 5)
-    if ($code -ne 0) { throw "Could not persist '$Name' (return code $code)." }
+    $returnCode = [BitConverter]::ToUInt32($reply, 5)
+    if ($returnCode -ne 0) { throw "Could not persist '$Name' (return code $returnCode)." }
 }
 
 function Get-NitroSenseRegistry {
-    param([string]$Name, [int]$Default = 0)
+    param([string]$Key, [string]$Name, [int]$Default = 0)
     try {
-        return [int](Get-ItemProperty -Path "HKLM:\$script:RegistryKey" -Name $Name -ErrorAction Stop).$Name
+        return [int](Get-ItemProperty -Path "HKLM:\$Key" -Name $Name -ErrorAction Stop).$Name
     }
     catch { return $Default }
 }
@@ -141,7 +149,7 @@ function Get-FanTelemetry {
 
 
 function Get-FanState {
-    $modeCode = Get-NitroSenseRegistry 'CurrentFanMode'
+    $modeCode = Get-NitroSenseRegistry $script:FanKey 'CurrentFanMode'
     $mode = switch ($modeCode) {
         1 { 'max' }
         2 { 'custom' }
@@ -149,30 +157,30 @@ function Get-FanState {
     }
     [pscustomobject]@{
         Mode    = $mode
-        Percent = (Get-NitroSenseRegistry 'CPUFanPercentage' 50)
-        GpuPercent = (Get-NitroSenseRegistry 'GPU1FanPercentage' 50)
-        CpuManual = ((Get-NitroSenseRegistry 'CPUFanCustomAuto' 1) -eq 0)
-        GpuManual = ((Get-NitroSenseRegistry 'GPU1FanCustomAuto' 1) -eq 0)
+        Percent = (Get-NitroSenseRegistry $script:FanKey 'CPUFanPercentage' 50)
+        GpuPercent = (Get-NitroSenseRegistry $script:FanKey 'GPU1FanPercentage' 50)
+        CpuManual = ((Get-NitroSenseRegistry $script:FanKey 'CPUFanCustomAuto' 1) -eq 0)
+        GpuManual = ((Get-NitroSenseRegistry $script:FanKey 'GPU1FanCustomAuto' 1) -eq 0)
     }
 }
 
 function Test-FanApplied([string]$ExpectedMode) {
     $actual = (Get-FanState).Mode
     if ($actual -ne $ExpectedMode) {
-        throw "The fan did not switch to '$ExpectedMode' (still '$actual'). If NitroSense is in Quiet mode, fan control is blocked - pick Balanced or Performance first."
+        throw "The fan did not switch to '$ExpectedMode' (still '$actual'). NitroSense may have re-applied its own fan profile."
     }
 }
 
 
 function Set-FanAuto {
     Invoke-AcerSet -Code 15 -Value $script:BehaviorAuto
-    Set-NitroSenseRegistry 'CurrentFanMode' 0
+    Set-NitroSenseRegistry $script:FanKey 'CurrentFanMode' 0
     Test-FanApplied 'auto'
 }
 
 function Set-FanMax {
     Invoke-AcerSet -Code 15 -Value $script:BehaviorMax
-    Set-NitroSenseRegistry 'CurrentFanMode' 1
+    Set-NitroSenseRegistry $script:FanKey 'CurrentFanMode' 1
     Test-FanApplied 'max'
 }
 
@@ -191,11 +199,11 @@ function Set-FanPercent {
     Invoke-AcerSet -Code 16 -Value ([uint64]1 -bor ([uint64]$Cpu -shl 8))
     Invoke-AcerSet -Code 16 -Value ([uint64]4 -bor ([uint64]$Gpu -shl 8))
 
-    Set-NitroSenseRegistry 'CurrentFanMode' 2
-    Set-NitroSenseRegistry 'CPUFanPercentage' $Cpu
-    Set-NitroSenseRegistry 'CPUFanCustomAuto' 0
-    Set-NitroSenseRegistry 'GPU1FanPercentage' $Gpu
-    Set-NitroSenseRegistry 'GPU1FanCustomAuto' 0
+    Set-NitroSenseRegistry $script:FanKey 'CurrentFanMode' 2
+    Set-NitroSenseRegistry $script:FanKey 'CPUFanPercentage' $Cpu
+    Set-NitroSenseRegistry $script:FanKey 'CPUFanCustomAuto' 0
+    Set-NitroSenseRegistry $script:FanKey 'GPU1FanPercentage' $Gpu
+    Set-NitroSenseRegistry $script:FanKey 'GPU1FanCustomAuto' 0
 
     Test-FanApplied 'custom'
     [pscustomobject]@{ Mode = 'custom'; Percent = $Cpu; GpuPercent = $Gpu }
@@ -208,6 +216,41 @@ function Step-Fan {
     Set-FanPercent -Cpu ($start + $Delta)
 }
 
+
+function Get-OperationMode {
+    $value = Invoke-AcerGet -Code 34 -Query 11
+    switch (($value -shr 8) -band 0xFF) {
+        0 { 'quiet' }
+        1 { 'default' }
+        4 { 'performance' }
+        default { 'unknown' }
+    }
+}
+
+function Set-OperationMode {
+    param([Parameter(Mandatory)][ValidateSet('quiet', 'default', 'performance')][string]$Mode)
+
+    $code = switch ($Mode) { 'quiet' { 0 } 'default' { 1 } 'performance' { 4 } }
+
+    # The vendor setter returns 0xFFFFFFFF for this command even on success, so
+    # the return code is ignored and the live readback below is authoritative.
+    Send-AcerFrame -Code 30 -Arguments @(, (ConvertTo-U32Argument $code)) -ReplySize 9 | Out-Null
+
+    # the service applies the mode asynchronously; poll for confirmation
+    $observed = 'unknown'
+    for ($attempt = 0; $attempt -lt 10; $attempt++) {
+        $observed = Get-OperationMode
+        if ($observed -eq $Mode) { break }
+        Start-Sleep -Milliseconds 200
+    }
+    if ($observed -ne $Mode) {
+        throw "The operation mode did not change to '$Mode' (still '$observed')."
+    }
+
+    Set-NitroSenseRegistry $script:ModeKey 'CurrentOperationMode' $code
+    $Mode
+}
+
 function Format-FanStatus {
     $state = Get-FanState
     $telemetry = Get-FanTelemetry
@@ -216,6 +259,7 @@ function Format-FanStatus {
         'max'    { 'max' }
         default  { 'auto' }
     }
-    "CPU {0,3} C / {1,4} RPM    GPU {2,3} C / {3,4} RPM    mode: {4}" -f `
-        $telemetry.CpuTemp, $telemetry.CpuRpm, $telemetry.GpuTemp, $telemetry.GpuRpm, $mode
+    "CPU {0,3} C / {1,4} RPM    GPU {2,3} C / {3,4} RPM    fan: {4}    system: {5}" -f `
+        $telemetry.CpuTemp, $telemetry.CpuRpm, $telemetry.GpuTemp, $telemetry.GpuRpm,
+        $mode, (Get-OperationMode)
 }
