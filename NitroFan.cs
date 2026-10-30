@@ -59,7 +59,7 @@ static class NitroFan
     static readonly Mutex SingleInstance = new Mutex(false, @"Local\NitroFanHotkeys");
     static string LogFile;
     static string StateDir;
-    static HotkeyWindow Window;
+    static HotkeyForm Window;
     static OverlayForm Overlay;
 
     [STAThread]
@@ -77,7 +77,26 @@ static class NitroFan
         LogFile = Path.Combine(StateDir, "hotkeys.log");
 
         Application.EnableVisualStyles();
-        Window = new HotkeyWindow();
+
+        // hidden main form: carries the application icon AND receives hotkeys
+        Window = new HotkeyForm();
+        Window.FormBorderStyle = FormBorderStyle.None;
+        Window.ShowInTaskbar = false;
+        Window.StartPosition = FormStartPosition.Manual;
+        Window.Location = new Point(-1000, -1000);
+        Window.Size = new Size(1, 1);
+
+        try
+        {
+            IntPtr hIcon = NativeMethods.LoadImage(IntPtr.Zero,
+                @"C:\Users\Ashish\AppData\Local\FanHotkeys\NitroFan.ico",
+                1 /* IMAGE_ICON */, 0, 0, 0x00000010 /* LR_LOADFROMFILE */);
+            if (hIcon != IntPtr.Zero)
+            {
+                Window.Icon = Icon.FromHandle(hIcon);
+            }
+        }
+        catch (Exception ex) { Log("WARNING: could not load icon: " + ex.Message); }
 
         int registered = 0;
         foreach (var b in Bindings)
@@ -159,7 +178,7 @@ static class NitroFan
             }
         };
 
-        Application.Run();
+        Application.Run(Window);
         return 0;
     }
 
@@ -412,13 +431,17 @@ static class NitroFan
     }
 
 
-    sealed class HotkeyWindow : NativeWindow
+    sealed class HotkeyForm : Form
     {
         public event Action<int> HotkeyPressed;
 
-        public HotkeyWindow()
+        public HotkeyForm()
         {
-            CreateHandle(new CreateParams());
+            FormBorderStyle = FormBorderStyle.None;
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.Manual;
+            Location = new Point(-1000, -1000);
+            Size = new Size(1, 1);
         }
 
         protected override void WndProc(ref Message m)
@@ -570,6 +593,9 @@ static class NitroFan
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint modifiers, uint key);
 
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern IntPtr LoadImage(IntPtr hInstance, string lpName, uint uType, int cx, int cy, uint fuLoad);
+
         [DllImport("user32.dll")]
         public static extern IntPtr GetDC(IntPtr window);
 
@@ -604,5 +630,42 @@ static class NitroFan
             public byte SourceConstantAlpha;
             public byte AlphaFormat;
         }
+    }
+
+    // draws the fan icon: dark circle background, three orange blades, hub
+    static Bitmap DrawFanIcon()
+    {
+        const int S = 256;
+        Bitmap bmp = new Bitmap(S, S);
+        using (Graphics g = Graphics.FromImage(bmp))
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.Clear(Color.Transparent);
+            using (SolidBrush bg = new SolidBrush(Color.FromArgb(30, 33, 40)))
+            {
+                g.FillEllipse(bg, 0, 0, S, S);
+            }
+            double cx = S / 2.0;
+            double cy = S / 2.0;
+            double rIn = 52.0;
+            double rOut = 102.0;
+            double halfW = Math.PI / 6.0;
+            Color orange = Color.FromArgb(255, 138, 0);
+            for (int i = 0; i < 3; i++)
+            {
+                double theta = Math.PI * (0.5 + i * 2.0 / 3.0);
+                PointF[] pts = new PointF[4];
+                pts[0] = new PointF((float)(cx + rIn * Math.Cos(theta + halfW)), (float)(cy + rIn * Math.Sin(theta + halfW)));
+                pts[1] = new PointF((float)(cx + rOut * Math.Cos(theta + halfW)), (float)(cy + rOut * Math.Sin(theta + halfW)));
+                pts[2] = new PointF((float)(cx + rOut * Math.Cos(theta - halfW)), (float)(cy + rOut * Math.Sin(theta - halfW)));
+                pts[3] = new PointF((float)(cx + rIn * Math.Cos(theta - halfW)), (float)(cy + rIn * Math.Sin(theta - halfW)));
+                using (SolidBrush fb = new SolidBrush(orange)) g.FillPolygon(fb, pts);
+            }
+            using (SolidBrush hb = new SolidBrush(Color.FromArgb(30, 33, 40)))
+            {
+                g.FillEllipse(hb, (float)(cx - 18), (float)(cy - 18), 36, 36);
+            }
+        }
+        return bmp;
     }
 }
