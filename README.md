@@ -51,19 +51,35 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 -Uninstall
 that starts the listener (hidden) at logon. Uninstalling also sets the fans
 back to Auto.
 
-The listener can also be started ad hoc with `fan-hotkeys.ps1` - it is a single
-instance, so a second copy exits immediately.
+The listener can also be started ad hoc by launching `NitroFan.exe` directly -
+it is a single instance, so a second copy exits immediately.
 
 ## Files
 
 | File | Purpose |
 | --- | --- |
-| `FanCore.ps1` | pipe protocol, telemetry, state, set/step functions |
+| `NitroFan.cs` | source for the compiled hotkey listener + OSD (global hotkeys, pipe client, panel) |
+| `NitroFan.exe` | the compiled listener (built with `csc.exe` - do not edit by hand) |
+| `FanCore.ps1` | pipe protocol + fan/action functions used by the CLI |
 | `fanctl.ps1` | command line front end |
-| `fan-hotkeys.ps1` | global hotkey listener (runs hidden at logon) |
-| `FanOsd.ps1` | the small on-screen confirmation panel (drawn inside the listener) |
 | `install.ps1` | creates/removes the logon task |
 | `hotkeys.log` | one line per press, plus errors |
+
+## Build the listener
+
+The background listener is compiled to `NitroFan.exe` (no PowerShell required):
+
+```
+C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe ^
+  /out:NitroFan.exe ^
+  /target:winexe ^
+  /reference:System.dll ^
+  /reference:System.Drawing.dll ^
+  /reference:System.Windows.Forms.dll ^
+  NitroFan.cs
+```
+
+Then run `install.ps1` to start the scheduled task that runs the `.exe`.
 
 ## Troubleshooting
 

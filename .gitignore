@@ -10,3 +10,8 @@ state.json
 .idea/
 Thumbs.db
 desktop.ini
+
+# Compiled binaries
+*.exe
+*.dll
+*.pdb

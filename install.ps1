@@ -18,28 +18,30 @@ $ErrorActionPreference = 'Stop'
 
 $taskName = 'Nitro Fan Hotkeys'
 $root     = $PSScriptRoot
-$listener = Join-Path $root 'fan-hotkeys.ps1'
+$listener = Join-Path $root 'NitroFan.exe'
 
 if ($Uninstall) {
     Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    # stop both the old PowerShell listener and the compiled exe
     Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
-        Where-Object { $_.CommandLine -like '*fan-hotkeys.ps1*' } |
+        Where-Object { $_.CommandLine -like '*FanHotkeys*' -or $_.CommandLine -like '*fan-hotkeys*' } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    Get-CimInstance Win32_Process -Filter "Name = 'NitroFan'" |
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     & (Join-Path $root 'fanctl.ps1') auto | Out-Null
     Write-Host 'Fan hotkeys removed. Fans are back on the automatic curve.' -ForegroundColor Yellow
     return
 }
 
-if (-not (Test-Path $listener)) { throw "fan-hotkeys.ps1 is missing next to install.ps1." }
+if (-not (Test-Path $listener)) { throw "NitroFan.exe is missing next to install.ps1." }
 
 try { Get-Service -Name 'PSSvc' -ErrorAction Stop | Out-Null }
 catch { throw 'The NitroSense service (PSSvc) is not installed. Install NitroSense first.' }
 
 $account = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument (
-    '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $listener)
+$action = New-ScheduledTaskAction -Execute $listener
 
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $account
 
@@ -60,8 +62,8 @@ Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
 Start-ScheduledTask -TaskName $taskName
 Start-Sleep -Seconds 2
 
-$running = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
-    Where-Object { $_.CommandLine -like '*fan-hotkeys.ps1*' }
+$running = Get-CimInstance Win32_Process -Filter "Name = 'NitroFan'" |
+    Where-Object { $_.CommandLine -like '*NitroFan.exe*' }
 
 if ($running) {
     Write-Host 'Fan hotkeys are running.' -ForegroundColor Green
