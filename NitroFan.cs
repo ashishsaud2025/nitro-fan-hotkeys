@@ -16,7 +16,7 @@ using System.Windows.Forms;
 // to the NitroSense service pipe. Runs hidden from a scheduled task at logon,
 // no administrator rights, no PowerShell in the background.
 //
-// Build: csc.exe /out:NitroFan.exe /target:winexe NitroFan.cs
+// Build: csc.exe /out:NitroFan.exe /target:winexe /win32icon:NitroFan.ico NitroFan.cs
 
 static class NitroFan
 {
@@ -86,17 +86,15 @@ static class NitroFan
         Window.Location = new Point(-1000, -1000);
         Window.Size = new Size(1, 1);
 
+        // window icon: load NitroFan.ico next to the exe. The .exe file icon
+        // itself is embedded at build time via /win32icon:NitroFan.ico.
         try
         {
-            IntPtr hIcon = NativeMethods.LoadImage(IntPtr.Zero,
-                @"C:\Users\Ashish\AppData\Local\FanHotkeys\NitroFan.ico",
-                1 /* IMAGE_ICON */, 0, 0, 0x00000010 /* LR_LOADFROMFILE */);
-            if (hIcon != IntPtr.Zero)
-            {
-                Window.Icon = Icon.FromHandle(hIcon);
-            }
+            string ico = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "NitroFan.ico");
+            if (File.Exists(ico))
+                Window.Icon = new Icon(ico);
         }
-        catch (Exception ex) { Log("WARNING: could not load icon: " + ex.Message); }
+        catch { }
 
         int registered = 0;
         foreach (var b in Bindings)
