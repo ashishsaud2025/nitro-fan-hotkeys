@@ -15,3 +15,7 @@ desktop.ini
 *.exe
 *.dll
 *.pdb
+
+# Agent session artifacts (LearnHarness)
+Sessions/
+lh-data/
