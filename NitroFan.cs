@@ -36,6 +36,14 @@ static class NitroFan
     const uint MOD_SHIFT = 0x0004;
     const uint MOD_NOREPEAT = 0x4000;
 
+    // Numpad virtual keys (distinct from the top-row digits)
+    const uint VK_NUMPAD0 = 0x60;
+    const uint VK_NUMPAD1 = 0x61;
+    const uint VK_NUMPAD2 = 0x62;
+    const uint VK_NUMPAD3 = 0x63;
+    const uint VK_NUMPAD8 = 0x68;
+    const uint VK_NUMPAD9 = 0x69;
+
     static readonly Binding[] Bindings = new[]
     {
         new Binding(1, 0x26, "up"),          // VK_UP
@@ -45,6 +53,12 @@ static class NitroFan
         new Binding(5, 0x31, "quiet"),       // '1'
         new Binding(6, 0x32, "default"),     // '2'
         new Binding(7, 0x33, "performance"), // '3'
+        new Binding(8, VK_NUMPAD8, "numpad-up"),   // Numpad 8
+        new Binding(9, VK_NUMPAD0, "numpad-auto"), // Numpad 0
+        new Binding(10, VK_NUMPAD9, "numpad-max"), // Numpad 9
+        new Binding(11, VK_NUMPAD1, "numpad-quiet"), // Numpad 1
+        new Binding(12, VK_NUMPAD2, "numpad-default"), // Numpad 2
+        new Binding(13, VK_NUMPAD3, "numpad-performance"), // Numpad 3
     };
 
     sealed class Binding
@@ -166,6 +180,38 @@ static class NitroFan
                         SetOperationMode("performance");
                         ShowOsd("Performance");
                         Log("Ctrl+Alt+3 -> performance");
+                        break;
+                    case 8:
+                        {
+                            int r = StepFan(10);
+                            ShowOsd("Fan " + r + "%");
+                            Log("Ctrl+Alt+Numpad8 -> custom " + r + "%");
+                            break;
+                        }
+                    case 9:
+                        SetFanAuto();
+                        ShowOsd("Fan Auto");
+                        Log("Ctrl+Alt+Numpad0 -> auto");
+                        break;
+                    case 10:
+                        SetFanMax();
+                        ShowOsd("Fan Max");
+                        Log("Ctrl+Alt+Numpad9 -> max");
+                        break;
+                    case 11:
+                        SetOperationMode("quiet");
+                        ShowOsd("Quiet");
+                        Log("Ctrl+Alt+Numpad1 -> quiet");
+                        break;
+                    case 12:
+                        SetOperationMode("default");
+                        ShowOsd("Default");
+                        Log("Ctrl+Alt+Numpad2 -> default");
+                        break;
+                    case 13:
+                        SetOperationMode("performance");
+                        ShowOsd("Performance");
+                        Log("Ctrl+Alt+Numpad3 -> performance");
                         break;
                 }
             }

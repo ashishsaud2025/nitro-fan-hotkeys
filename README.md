@@ -20,6 +20,12 @@ No administrator rights are needed at any point.
 | `Ctrl + Alt + 1` | Quiet performance mode |
 | `Ctrl + Alt + 2` | Default performance mode |
 | `Ctrl + Alt + 3` | Performance mode |
+| `Ctrl + Alt + Numpad8` | fan speed +10 |
+| `Ctrl + Alt + Numpad0` | Auto - back to Acer's own curve |
+| `Ctrl + Alt + Numpad9` | Max |
+| `Ctrl + Alt + Numpad1` | Quiet performance mode |
+| `Ctrl + Alt + Numpad2` | Default performance mode |
+| `Ctrl + Alt + Numpad3` | Performance mode |
 
 Fan range is 20-100%. The performance modes are the same Quiet / Default /
 Performance presets as in NitroSense's Mode panel; they change CPU and GPU power

@@ -80,5 +80,11 @@ Write-Host '  Ctrl + Alt + 9      Max' -ForegroundColor Cyan
 Write-Host '  Ctrl + Alt + 1      Quiet mode' -ForegroundColor Cyan
 Write-Host '  Ctrl + Alt + 2      Default mode' -ForegroundColor Cyan
 Write-Host '  Ctrl + Alt + 3      Performance mode' -ForegroundColor Cyan
+Write-Host '  Ctrl + Alt + Numpad8  fan +10%' -ForegroundColor Cyan
+Write-Host '  Ctrl + Alt + Numpad0  Auto (Acer curve)' -ForegroundColor Cyan
+Write-Host '  Ctrl + Alt + Numpad9  Max' -ForegroundColor Cyan
+Write-Host '  Ctrl + Alt + Numpad1  Quiet mode' -ForegroundColor Cyan
+Write-Host '  Ctrl + Alt + Numpad2  Default mode' -ForegroundColor Cyan
+Write-Host '  Ctrl + Alt + Numpad3  Performance mode' -ForegroundColor Cyan
 Write-Host ''
 Write-Host 'Command line: fanctl.ps1 status | auto | max | set 70 | step 10 | quiet | default | performance'
