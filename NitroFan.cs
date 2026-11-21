@@ -712,6 +712,18 @@ static class NitroFan
             Size = new Size(1, 1);
         }
 
+        // Keep this helper window out of Alt+Tab: a tool window is never listed there.
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.ExStyle |= 0x00000080;   // WS_EX_TOOLWINDOW
+                cp.ExStyle &= ~0x00040000;  // clear WS_EX_APPWINDOW
+                return cp;
+            }
+        }
+
         protected override void WndProc(ref Message m)
         {
             if (m.Msg == WM_HOTKEY)
