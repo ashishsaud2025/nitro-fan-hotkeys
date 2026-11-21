@@ -217,7 +217,20 @@ function Step-Fan {
 }
 
 
-function Get-OperationMode {
+# Performance modes (quiet / default / performance) are applied one of two ways:
+#  1. Firmware modes via the NitroSense service pipe (commands 30/34),
+#     e.g. Nitro AN515-58 / service 3.01.3052.
+#  2. Windows power plans (Power saver / Balanced / High performance) on models
+#     whose service does not answer those commands, e.g. AN515-45.
+# The firmware path is used whenever the service answers the mode query;
+# otherwise this falls back to power plans.
+$script:PowerSchemes = @{
+    quiet       = 'a1841308-3541-4fab-bc81-f71556f20b4a'   # Power saver
+    default     = '381b4222-f694-41f0-9685-ff5bb260df2e'   # Balanced
+    performance = '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c'   # High performance
+}
+
+function Get-OperationModeFirmware {
     $value = Invoke-AcerGet -Code 34 -Query 11
     switch (($value -shr 8) -band 0xFF) {
         0 { 'quiet' }
@@ -227,8 +240,27 @@ function Get-OperationMode {
     }
 }
 
+function Get-OperationModePowerPlan {
+    $active = ((& powercfg /getactivescheme) -join ' ').ToLowerInvariant()
+    foreach ($name in $script:PowerSchemes.Keys) {
+        if ($active.Contains($script:PowerSchemes[$name])) { return $name }
+    }
+    'unknown'
+}
+
+function Test-FirmwareModes {
+    try { Get-OperationModeFirmware | Out-Null; return $true }
+    catch { return $false }
+}
+
+function Get-OperationMode {
+    if (Test-FirmwareModes) { Get-OperationModeFirmware } else { Get-OperationModePowerPlan }
+}
+
 function Set-OperationMode {
     param([Parameter(Mandatory)][ValidateSet('quiet', 'default', 'performance')][string]$Mode)
+
+    if (-not (Test-FirmwareModes)) { return Set-OperationModePowerPlan $Mode }
 
     $code = switch ($Mode) { 'quiet' { 0 } 'default' { 1 } 'performance' { 4 } }
 
@@ -239,7 +271,7 @@ function Set-OperationMode {
     # the service applies the mode asynchronously; poll for confirmation
     $observed = 'unknown'
     for ($attempt = 0; $attempt -lt 10; $attempt++) {
-        $observed = Get-OperationMode
+        $observed = Get-OperationModeFirmware
         if ($observed -eq $Mode) { break }
         Start-Sleep -Milliseconds 200
     }
@@ -251,9 +283,24 @@ function Set-OperationMode {
     $Mode
 }
 
+function Set-OperationModePowerPlan {
+    param([Parameter(Mandatory)][string]$Mode)
+
+    $output = (& powercfg /setactive $script:PowerSchemes[$Mode] 2>&1) -join ' '
+    if ($LASTEXITCODE -ne 0) { throw "powercfg could not activate '$Mode': $output" }
+
+    $observed = Get-OperationModePowerPlan
+    if ($observed -ne $Mode) {
+        throw "The power plan did not change to '$Mode' (still '$observed')."
+    }
+    $Mode
+}
+
 function Format-FanStatus {
     $state = Get-FanState
     $telemetry = Get-FanTelemetry
+    # not every service version answers the operation-mode query
+    $system = try { Get-OperationMode } catch { 'unavailable' }
     $mode = switch ($state.Mode) {
         'custom' { "custom $($state.Percent)% (GPU $($state.GpuPercent)%)" }
         'max'    { 'max' }
@@ -261,5 +308,5 @@ function Format-FanStatus {
     }
     "CPU {0,3} C / {1,4} RPM    GPU {2,3} C / {3,4} RPM    fan: {4}    system: {5}" -f `
         $telemetry.CpuTemp, $telemetry.CpuRpm, $telemetry.GpuTemp, $telemetry.GpuRpm,
-        $mode, (Get-OperationMode)
+        $mode, $system
 }

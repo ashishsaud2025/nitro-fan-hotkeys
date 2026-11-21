@@ -6,8 +6,34 @@ NitroSense background service (`PSSvc`) that the NitroSense window sends, and
 mirroring the result into NitroSense's registry state so the app shows the
 right values the next time it starts.
 
-Tested on **Nitro AN515-58**, NitroSense Service 3.01.3052, Windows 11.
 No administrator rights are needed at any point.
+
+## Supported systems
+
+| Laptop | NitroSense Service | Fan hotkeys | Mode hotkeys (`1` / `2` / `3`) |
+| --- | --- | --- | --- |
+| Nitro AN515-58 | 3.01.3052 | Tested | Firmware Quiet / Default / Performance modes via the service (tested) |
+| Nitro AN515-45 | 3.1.3028 | Tested | Windows power plans: Power saver / Balanced / High performance |
+| Other Nitro / Predator models with `PSSvc` | - | Untested | Whichever of the two methods the service supports (see below) |
+
+Windows 11 and the NitroSense service (`PSSvc`) must be installed and running.
+
+**How the mode hotkeys pick a method.** On every press the listener asks the
+service for the current performance mode (command 34). If the service answers,
+the firmware mode is set through the service, as on the AN515-58. If the
+service closes the pipe without answering, as on the AN515-45, the keys switch
+the matching Windows power plan with `powercfg` instead. On those models
+NitroSense's own mode selector is a power-plan switch. The fan hotkeys always
+use the service.
+
+| Key | Firmware modes (AN515-58) | Power plans (AN515-45) |
+| --- | --- | --- |
+| `Ctrl + Alt + 1` | Quiet | Power saver |
+| `Ctrl + Alt + 2` | Default | Balanced |
+| `Ctrl + Alt + 3` | Performance | High performance |
+
+Other models are untested. If your fan keys work but the mode keys log an error,
+open an issue with your laptop model and the NitroSense Service version.
 
 ## Shortcuts
 
@@ -27,10 +53,11 @@ No administrator rights are needed at any point.
 | `Ctrl + Alt + Numpad2` | Default performance mode |
 | `Ctrl + Alt + Numpad3` | Performance mode |
 
-Fan range is 20-100%. The performance modes are the same Quiet / Default /
-Performance presets as in NitroSense's Mode panel; they change CPU and GPU power
-limits and leave the fan setting alone. Every press shows a small panel in the
-bottom-right corner.
+Fan range is 20-100%. On models with firmware modes, the performance modes are
+the same Quiet / Default / Performance presets as in NitroSense's Mode panel;
+they change CPU and GPU power limits and leave the fan setting alone. On models
+that use power plans, see [Supported systems](#supported-systems). Every press
+shows a small panel in the bottom-right corner.
 
 ## Command line
 
@@ -97,6 +124,11 @@ does not exist, the listener is not running: start it or re-run `install.ps1`.
 the reason, then try again; if NitroSense has just re-applied its own profile,
 the write is simply retried on the next press.
 
+**"Mode error" panel on `Ctrl+Alt+1/2/3`** - check `hotkeys.log` for the reason.
+`powercfg could not activate ...` means Windows refused the power plan switch.
+On a model with firmware modes, `did not change to ...` means the service
+accepted the command but the mode stayed the same.
+
 **Shortcuts use Ctrl+Alt+Shift instead of Ctrl+Alt** - some Intel graphics
 drivers claim `Ctrl+Alt+Arrow` for screen rotation. The listener falls back
 automatically and logs which combination it got.
@@ -111,7 +143,7 @@ switch, not when another program changes the fan. The RPM numbers are live, and
 the setting itself is applied, but the Auto/Max/Custom selector stays where it
 was. Close and reopen NitroSense and it will show the correct mode and slider
 position, because the registry state is kept in sync. The same applies to the
-Quiet/Default/Performance buttons.
+Quiet/Default/Performance buttons on models with firmware modes.
 
 ## How it works
 
@@ -135,8 +167,20 @@ cmd 30  operation mode   arg u32  0 quiet, 1 default, 4 performance
 cmd 34  mode readback    arg u32  11, mode = (value >> 8) & 0xFF
 ```
 
-The protocol was confirmed against this laptop and cross-checked with the
-reverse-engineering notes of the open-source RESense project.
+Commands 30 and 34 are only used on models whose service answers them. When the
+service closes the pipe without a reply (seen on the AN515-45 with service
+3.1.3028), the mode hotkeys use Windows power plans instead:
+
+```
+quiet        a1841308-3541-4fab-bc81-f71556f20b4a   Power saver
+default      381b4222-f694-41f0-9685-ff5bb260df2e   Balanced
+performance  8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c   High performance
+powercfg /setactive <guid>        powercfg /getactivescheme
+```
+
+The fan protocol was confirmed on the AN515-58 and AN515-45, and cross-checked
+with the reverse-engineering notes of the open-source RESense project. The mode
+commands (30 and 34) were confirmed on the AN515-58 only.
 
 ## License
 
@@ -161,4 +205,3 @@ Acer, Nitro, NitroSense and Predator are trademarks of Acer Inc.
 Fan control can raise temperatures, noise and fan wear. Running fans at 100%
 continuously wears the bearings faster than the stock curve does. Use at your
 own risk; the software is provided without warranty of any kind.
-

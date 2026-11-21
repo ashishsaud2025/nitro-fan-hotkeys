@@ -1,5 +1,7 @@
+#pragma warning disable CA1416 // Registry is Windows-only; this tool targets Windows (.NET Framework)
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -125,7 +127,7 @@ static class NitroFan
                 else
                     Log("ERROR: could not register hotkey '" + b.Name + "' (error " + err + ").");
             }
-            if (ok) registered++;
+            if (ok) { registered++; if (modifiers == (MOD_CONTROL | MOD_ALT | MOD_NOREPEAT)) Log("Registered Ctrl+Alt+" + b.Name); }
         }
 
         if (registered == 0)
@@ -167,19 +169,13 @@ static class NitroFan
                         Log("Ctrl+Alt+9 -> max");
                         break;
                     case 5:
-                        SetOperationMode("quiet");
-                        ShowOsd("Quiet");
-                        Log("Ctrl+Alt+1 -> quiet");
+                        RunModeAsync("quiet", "Quiet", "Ctrl+Alt+1 -> quiet");
                         break;
                     case 6:
-                        SetOperationMode("default");
-                        ShowOsd("Default");
-                        Log("Ctrl+Alt+2 -> default");
+                        RunModeAsync("default", "Default", "Ctrl+Alt+2 -> default");
                         break;
                     case 7:
-                        SetOperationMode("performance");
-                        ShowOsd("Performance");
-                        Log("Ctrl+Alt+3 -> performance");
+                        RunModeAsync("performance", "Performance", "Ctrl+Alt+3 -> performance");
                         break;
                     case 8:
                         {
@@ -199,19 +195,13 @@ static class NitroFan
                         Log("Ctrl+Alt+Numpad9 -> max");
                         break;
                     case 11:
-                        SetOperationMode("quiet");
-                        ShowOsd("Quiet");
-                        Log("Ctrl+Alt+Numpad1 -> quiet");
+                        RunModeAsync("quiet", "Quiet", "Ctrl+Alt+Numpad1 -> quiet");
                         break;
                     case 12:
-                        SetOperationMode("default");
-                        ShowOsd("Default");
-                        Log("Ctrl+Alt+Numpad2 -> default");
+                        RunModeAsync("default", "Default", "Ctrl+Alt+Numpad2 -> default");
                         break;
                     case 13:
-                        SetOperationMode("performance");
-                        ShowOsd("Performance");
-                        Log("Ctrl+Alt+Numpad3 -> performance");
+                        RunModeAsync("performance", "Performance", "Ctrl+Alt+Numpad3 -> performance");
                         break;
                 }
             }
@@ -415,17 +405,74 @@ static class NitroFan
     }
 
 
+    static readonly object ModeLock = new object();
+
+    // Runs the mode switch off the UI thread (it can take ~2s while polling),
+    // then shows the OSD / logs back on the UI thread. Restores the previous
+    // fan setting afterwards because NitroSense re-applies its own fan profile.
+    static void RunModeAsync(string mode, string osd, string logText)
+    {
+        ThreadPool.QueueUserWorkItem(delegate
+        {
+            string error = null;
+            lock (ModeLock)
+            {
+                try
+                {
+                    SetOperationMode(mode);
+                }
+                catch (Exception ex) { error = ex.Message; }
+            }
+            Window.BeginInvoke(new Action(delegate
+            {
+                if (error == null) { ShowOsd(osd); Log(logText); }
+                else { ShowOsd("Mode error"); Log("ERROR on " + logText + ": " + error); }
+            }));
+        });
+    }
+
+    // Performance modes (Quiet / Default / Performance) are applied one of two ways:
+    //  1. Firmware modes via the NitroSense service pipe (commands 30/34),
+    //     e.g. Nitro AN515-58 / service 3.01.3052.
+    //  2. Windows power plans (Power saver / Balanced / High performance) on
+    //     models whose service does not answer those commands, e.g. AN515-45.
+    // The firmware path is used whenever the service answers the mode query;
+    // otherwise it falls back to power plans.
+    const string SchemeQuiet       = "a1841308-3541-4fab-bc81-f71556f20b4a"; // Power saver
+    const string SchemeDefault     = "381b4222-f694-41f0-9685-ff5bb260df2e"; // Balanced
+    const string SchemePerformance = "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"; // High performance
+
+    static bool FirmwareModesSupported()
+    {
+        try { GetOperationModeFirmware(); return true; }
+        catch (IOException) { return false; }
+        catch (TimeoutException) { return false; }
+    }
+
     static string GetOperationMode()
+    {
+        return FirmwareModesSupported() ? GetOperationModeFirmware() : GetOperationModePowerPlan();
+    }
+
+    static void SetOperationMode(string mode)
+    {
+        if (FirmwareModesSupported()) SetOperationModeFirmware(mode);
+        else SetOperationModePowerPlan(mode);
+    }
+
+    // ---- firmware modes (service pipe) ----
+
+    static string GetOperationModeFirmware()
     {
         ulong value = GetU64(34, 11);
         int code = (int)((value >> 8) & 0xFF);
         if (code == 0) return "quiet";
         if (code == 1) return "default";
         if (code == 4) return "performance";
-        return "unknown";
+        return "unknown (code " + code + ")";
     }
 
-    static void SetOperationMode(string mode)
+    static void SetOperationModeFirmware(string mode)
     {
         int code;
         if (mode == "quiet") code = 0;
@@ -439,15 +486,62 @@ static class NitroFan
         string observed = "unknown";
         for (int attempt = 0; attempt < 10; attempt++)
         {
-            observed = GetOperationMode();
+            observed = GetOperationModeFirmware();
             if (observed == mode) break;
             Thread.Sleep(200);
         }
         if (observed != mode)
             throw new IOException("The operation mode did not change to '" + mode +
-                "' (still '" + observed + ").");
+                "' (still '" + observed + "').");
 
         PersistReg(ModeRegKey, "CurrentOperationMode", (uint)code);
+    }
+
+    // ---- Windows power plans ----
+
+    static string RunPowercfg(string args, out int exitCode)
+    {
+        ProcessStartInfo psi = new ProcessStartInfo("powercfg.exe", args);
+        psi.UseShellExecute = false;
+        psi.CreateNoWindow = true;
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+        using (Process p = Process.Start(psi))
+        {
+            string output = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
+            p.WaitForExit(5000);
+            exitCode = p.ExitCode;
+            return output;
+        }
+    }
+
+    static string GetOperationModePowerPlan()
+    {
+        int exit;
+        string active = RunPowercfg("/getactivescheme", out exit).ToLowerInvariant();
+        if (active.Contains(SchemeQuiet)) return "quiet";
+        if (active.Contains(SchemeDefault)) return "default";
+        if (active.Contains(SchemePerformance)) return "performance";
+        return "unknown";
+    }
+
+    static void SetOperationModePowerPlan(string mode)
+    {
+        string guid;
+        if (mode == "quiet") guid = SchemeQuiet;
+        else if (mode == "default") guid = SchemeDefault;
+        else if (mode == "performance") guid = SchemePerformance;
+        else throw new ArgumentException("Unknown mode: " + mode);
+
+        int exit;
+        string output = RunPowercfg("/setactive " + guid, out exit);
+        if (exit != 0)
+            throw new IOException("powercfg could not activate '" + mode + "': " + output.Trim());
+
+        string observed = GetOperationModePowerPlan();
+        if (observed != mode)
+            throw new IOException("The power plan did not change to '" + mode +
+                "' (still '" + observed + "').");
     }
 
 
