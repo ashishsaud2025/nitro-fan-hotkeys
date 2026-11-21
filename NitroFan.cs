@@ -17,9 +17,9 @@ using System.Windows.Forms;
 [assembly: System.Reflection.AssemblyTitle("NitroFan")]
 [assembly: System.Reflection.AssemblyDescription("Global fan and performance-mode hotkeys for Acer Nitro laptops")]
 [assembly: System.Reflection.AssemblyProduct("Nitro Fan Hotkeys")]
-[assembly: System.Reflection.AssemblyVersion("1.1.1.0")]
-[assembly: System.Reflection.AssemblyFileVersion("1.1.1.0")]
-[assembly: System.Reflection.AssemblyInformationalVersion("1.1.1")]
+[assembly: System.Reflection.AssemblyVersion("1.2.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("1.2.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersion("1.2.0")]
 
 // NitroFan - compiled replacement for fan-hotkeys.ps1 + FanCore.ps1 + FanOsd.ps1
 //
@@ -27,7 +27,8 @@ using System.Windows.Forms;
 // to the NitroSense service pipe. Runs hidden from a scheduled task at logon,
 // no administrator rights, no PowerShell in the background.
 //
-// Build: csc.exe /out:NitroFan.exe /target:winexe /win32icon:NitroFan.ico NitroFan.cs
+// Build: csc.exe /out:NitroFan.exe /target:winexe /win32icon:NitroFan.ico
+//                /reference:Microsoft.CSharp.dll NitroFan.cs
 
 static class NitroFan
 {
@@ -37,6 +38,7 @@ static class NitroFan
     const ulong BehaviorMax = 0x820009;
     const string FanRegKey = @"SOFTWARE\OEM\NitroSense\FanControl";
     const string ModeRegKey = @"SOFTWARE\OEM\NitroSense\Overclock";
+    const string TaskName = "Nitro Fan Hotkeys";
     const int MinPercent = 20;
     const int MaxPercent = 100;
 
@@ -88,18 +90,42 @@ static class NitroFan
     static OverlayForm Overlay;
 
     [STAThread]
-    static int Main()
+    static int Main(string[] args)
     {
+        StateDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FanHotkeys");
+        Directory.CreateDirectory(StateDir);
+        LogFile = Path.Combine(StateDir, "hotkeys.log");
+
+        if (args != null && args.Length > 0)
+        {
+            string command = args[0].ToLowerInvariant();
+            if (command == "--install-startup" || command == "/install-startup")
+            {
+                if (RunStartupCommand(true) != 0) return 1;
+                // fall through: this instance becomes the running listener
+            }
+            else if (command == "--uninstall-startup" || command == "/uninstall-startup")
+            {
+                return RunStartupCommand(false);
+            }
+            else if (command == "--help" || command == "/?" || command == "-h")
+            {
+                MessageBox.Show(
+                    "NitroFan.exe [--install-startup | --uninstall-startup]\n\n" +
+                    "With no arguments it runs the hotkey listener.\n\n" +
+                    "  --install-startup     start automatically at logon\n" +
+                    "  --uninstall-startup   remove the logon task",
+                    TaskName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return 0;
+            }
+        }
+
         if (!SingleInstance.WaitOne(0))
         {
             Log("Another listener is already running; exiting.");
             return 0;
         }
-
-        StateDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FanHotkeys");
-        Directory.CreateDirectory(StateDir);
-        LogFile = Path.Combine(StateDir, "hotkeys.log");
 
         Application.EnableVisualStyles();
 
@@ -223,6 +249,97 @@ static class NitroFan
 
         Application.Run(Window);
         return 0;
+    }
+
+
+    // ---- self-service startup registration ----
+    // Creates/removes the same "Nitro Fan Hotkeys" logon task that install.ps1
+    // registers, using the Task Scheduler COM API. This lets a downloaded
+    // NitroFan.exe set itself up without the repository scripts.
+
+    static int RunStartupCommand(bool install)
+    {
+        string message;
+        bool ok = SetStartup(install, out message);
+        MessageBox.Show(message, TaskName, MessageBoxButtons.OK,
+            ok ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+        if (ok)
+            Log(install ? "Startup enabled (task '" + TaskName + "')"
+                        : "Startup disabled (task removed)");
+        else
+            Log("Startup error: " + message.Replace("\r\n", " ").Replace("\n", " "));
+        return ok ? 0 : 1;
+    }
+
+    static bool SetStartup(bool install, out string message)
+    {
+        try
+        {
+            Type serviceType = Type.GetTypeFromProgID("Schedule.Service");
+            if (serviceType == null)
+            {
+                message = "Task Scheduler is not available on this system.";
+                return false;
+            }
+
+            dynamic service = Activator.CreateInstance(serviceType);
+            service.Connect();
+            dynamic root = service.GetFolder("\\");
+
+            if (!install)
+            {
+                try
+                {
+                    root.DeleteTask(TaskName, 0);
+                    message = "Startup disabled. The '" + TaskName + "' task was removed.\n\n" +
+                              "The running listener stays active until you sign out or exit it.";
+                }
+                catch (System.Runtime.InteropServices.COMException ex)
+                {
+                    if ((uint)ex.HResult == 0x80070002)
+                        message = "Startup was not enabled: the '" + TaskName + "' task does not exist.";
+                    else throw;
+                }
+                return true;
+            }
+
+            string user = System.Security.Principal.WindowsIdentity.GetCurrent().Name;
+            string exe = Application.ExecutablePath;
+
+            dynamic task = service.NewTask(0); // TASK_CREATE
+            task.RegistrationInfo.Description =
+                "Global hotkeys for Acer Nitro fan speed and performance mode.";
+            task.Settings.Enabled = true;
+            task.Settings.Hidden = true;
+            task.Settings.StartWhenAvailable = true;
+            task.Settings.DisallowStartIfOnBatteries = false;
+            task.Settings.StopIfGoingOnBatteries = false;
+            task.Settings.ExecutionTimeLimit = "PT0S";
+            task.Settings.MultipleInstances = 2; // TASK_INSTANCES_IGNORE_NEW
+
+            dynamic trigger = task.Triggers.Create(9); // TASK_TRIGGER_LOGON
+            trigger.UserId = user;
+            trigger.Enabled = true;
+
+            dynamic action = task.Actions.Create(0); // TASK_ACTION_EXEC
+            action.Path = exe;
+
+            task.Principal.UserId = user;
+            task.Principal.LogonType = 3; // TASK_LOGON_INTERACTIVE_TOKEN
+            task.Principal.RunLevel = 0;  // TASK_RUNLEVEL_LUA, no elevation
+
+            // 6 = TASK_CREATE_OR_UPDATE, 3 = TASK_LOGON_INTERACTIVE_TOKEN
+            root.RegisterTaskDefinition(TaskName, task, 6, user, null, 3);
+
+            message = "Startup enabled. NitroFan.exe will start automatically at logon.\n\n" +
+                      "Task: " + TaskName + "\nPath: " + exe;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            message = "Could not " + (install ? "enable" : "disable") + " startup:\n" + ex.Message;
+            return false;
+        }
     }
 
 

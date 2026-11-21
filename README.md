@@ -84,6 +84,19 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 -Uninstall
 that starts the listener (hidden) at logon. Uninstalling also sets the fans
 back to Auto.
 
+If you only have `NitroFan.exe` (for example the release download), it can
+register itself:
+
+```powershell
+.\NitroFan.exe --install-startup
+.\NitroFan.exe --uninstall-startup
+```
+
+Both show a small confirmation dialog. They create and remove the same
+**Nitro Fan Hotkeys** task as `install.ps1`, so either method can manage the
+other's task. `--install-startup` then keeps running as the listener, so the
+hotkeys are active immediately as well as at the next logon.
+
 The listener can also be started ad hoc by launching `NitroFan.exe` directly -
 it is a single instance, so a second copy exits immediately.
 
@@ -110,6 +123,7 @@ C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe ^
   /reference:System.dll ^
   /reference:System.Drawing.dll ^
   /reference:System.Windows.Forms.dll ^
+  /reference:Microsoft.CSharp.dll ^
   NitroFan.cs
 ```
 
