@@ -1,4 +1,3 @@
-#pragma warning disable CA1416 // Registry is Windows-only; this tool targets Windows (.NET Framework)
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -11,6 +10,16 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Windows.Forms;
+
+// This is a Windows-only .NET Framework tool, so the CA1416 platform analyzer
+// warning does not apply. A "#pragma warning disable CA1416" cannot be used
+// here because the .NET Framework csc.exe that builds this emits CS1692 for it.
+[assembly: System.Reflection.AssemblyTitle("NitroFan")]
+[assembly: System.Reflection.AssemblyDescription("Global fan and performance-mode hotkeys for Acer Nitro laptops")]
+[assembly: System.Reflection.AssemblyProduct("Nitro Fan Hotkeys")]
+[assembly: System.Reflection.AssemblyVersion("1.1.1.0")]
+[assembly: System.Reflection.AssemblyFileVersion("1.1.1.0")]
+[assembly: System.Reflection.AssemblyInformationalVersion("1.1.1")]
 
 // NitroFan - compiled replacement for fan-hotkeys.ps1 + FanCore.ps1 + FanOsd.ps1
 //
@@ -408,8 +417,7 @@ static class NitroFan
     static readonly object ModeLock = new object();
 
     // Runs the mode switch off the UI thread (it can take ~2s while polling),
-    // then shows the OSD / logs back on the UI thread. Restores the previous
-    // fan setting afterwards because NitroSense re-applies its own fan profile.
+    // then shows the OSD / logs back on the UI thread.
     static void RunModeAsync(string mode, string osd, string logText)
     {
         ThreadPool.QueueUserWorkItem(delegate
@@ -444,14 +452,13 @@ static class NitroFan
 
     static bool FirmwareModesSupported()
     {
+        // Any failure to get an answer means the service does not support the
+        // firmware mode commands, so the caller falls back to power plans.
         try { GetOperationModeFirmware(); return true; }
         catch (IOException) { return false; }
         catch (TimeoutException) { return false; }
-    }
-
-    static string GetOperationMode()
-    {
-        return FirmwareModesSupported() ? GetOperationModeFirmware() : GetOperationModePowerPlan();
+        catch (UnauthorizedAccessException) { return false; }
+        catch (System.Security.SecurityException) { return false; }
     }
 
     static void SetOperationMode(string mode)
@@ -508,8 +515,14 @@ static class NitroFan
         psi.RedirectStandardError = true;
         using (Process p = Process.Start(psi))
         {
+            if (!p.WaitForExit(5000))
+            {
+                try { p.Kill(); } catch { }
+                throw new IOException("powercfg did not finish within 5 seconds.");
+            }
+            // powercfg writes a few hundred bytes at most, so the pipe buffers
+            // cannot fill up and block the child before it exits.
             string output = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
-            p.WaitForExit(5000);
             exitCode = p.ExitCode;
             return output;
         }

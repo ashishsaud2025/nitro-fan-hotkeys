@@ -106,6 +106,7 @@ The background listener is compiled to `NitroFan.exe` (no PowerShell required):
 C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe ^
   /out:NitroFan.exe ^
   /target:winexe ^
+  /win32icon:NitroFan.ico ^
   /reference:System.dll ^
   /reference:System.Drawing.dll ^
   /reference:System.Windows.Forms.dll ^
